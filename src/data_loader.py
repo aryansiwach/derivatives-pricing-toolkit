@@ -126,12 +126,15 @@ def fetch_risk_free_rate(asof: dt.date | None = None) -> dict:
     for reporting, the 3-month point on the curve."""
     asof = asof or pull_asof()
     curve = load_zero_curve()
+    r_cc_3m = interpolate_zero_rate(curve, 91)
     return {
         "asof": str(asof),
         "source": "optionm.zerocd",
         "curve_days": curve["days"].tolist(),
         "curve_rate_cc": curve["rate_cc"].round(6).tolist(),
-        "r_cc_3m": interpolate_zero_rate(curve, 91),
+        "r_cc_3m": r_cc_3m,
+        "r_cc": r_cc_3m,      # representative scalar; the processed frame carries
+                             # a separate per-expiry r_cc column
         "conversion": "rate_cc = optionm.zerocd.rate / 100 (already continuously "
                       "compounded); interpolated per option expiry",
     }
