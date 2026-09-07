@@ -50,8 +50,18 @@ venv\Scripts\pip install -r requirements.txt          # Windows
 # source venv/bin/activate && pip install -r requirements.txt   # macOS/Linux
 ```
 
-Data pulls need network access (Yahoo Finance via `yfinance`, and FRED via
-`pandas_datareader` for the risk-free rate). No API keys required.
+The option data is WRDS OptionMetrics IvyDB US, pulled once by
+`scripts/wrds_pull.py` (needs an authenticated WRDS session). Everything
+downstream reads local CSVs -- no network, no API keys. `data/` is git-ignored;
+the OptionMetrics licence does not permit redistribution.
+
+```bash
+python scripts/wrds_pull.py --asof 2024-03-15
+```
+
+Pick a date you know IvyDB has loaded -- the WRDS feed lags real time by weeks
+to months. This writes `data/wrds_raw/` (SPY and AAPL chains, spot, dividends,
+and the `optionm.zerocd` zero curve).
 
 To run the notebooks from the command line:
 
@@ -68,36 +78,38 @@ characteristic-function pricer. Budget 30-45 minutes for that one.
 
 ## Execution order
 
-1. **Data pull**: `python src/data_loader.py`. Pulls SPY and AAPL option
-   chains (three expiries each: near/mid/long), spot price, trailing
-   dividend yield, and the FRED 3-month T-bill rate. Applies documented
-   filters (zero bid, crossed quotes, low open interest, near-expiry,
-   extreme moneyness) and caches raw and processed data under `data/`
-   with a timestamp, plus a JSON summary sidecar per ticker.
-2. **`notebooks/01_eda.ipynb`**: market snapshot, chain composition,
+1. **WRDS pull** (once): `python scripts/wrds_pull.py --asof <date>` -> `data/wrds_raw/`.
+2. **Process**: `python src/data_loader.py`. Reads the pull, picks three
+   expiries per ticker (near/mid/long), applies the documented filters (zero
+   bid, crossed quotes, low open interest, near-expiry, extreme moneyness),
+   attaches spot, trailing dividend yield, and a continuously-compounded rate
+   interpolated from `optionm.zerocd` to each option's own days-to-expiry.
+   Caches raw and processed data under `data/` with a timestamp plus a JSON
+   summary sidecar per ticker.
+3. **`notebooks/01_eda.ipynb`**: market snapshot, chain composition,
    filter drop counts, and why this toolkit solves its own implied vol
-   instead of trusting yfinance's field.
-3. **Unit tests** (`pytest`, 83 tests): Black-Scholes against Hull
+   instead of trusting the OptionMetrics field.
+4. **Unit tests** (`pytest`, 83 tests): Black-Scholes against Hull
    textbook values, put-call parity, convergence sanity, edge cases, and
    a mocked test suite for the data pipeline, before anything downstream
    depends on any of it.
-4. **`notebooks/02_convergence.ipynb`** (H1): binomial and Monte Carlo
+5. **`notebooks/02_convergence.ipynb`** (H1): binomial and Monte Carlo
    convergence to Black-Scholes, log-log regression of error against N.
-5. **`notebooks/03_smile_calibration.ipynb`** (H2, H4): Brent-solved
+6. **`notebooks/03_smile_calibration.ipynb`** (H2, H4): Brent-solved
    implied-vol surface, smile regression with HAC-robust standard errors,
    and multi-start Merton/Heston calibration with an in-sample/out-of-
    sample strike split and two parameter-stability checks.
-6. **`notebooks/04_early_exercise.ipynb`** (H5): American early-exercise
+7. **`notebooks/04_early_exercise.ipynb`** (H5): American early-exercise
    premium, binomial versus Black-Scholes gap to the market, by moneyness
    bucket, using a non-circular OTM-fitted smile vol with its own reported
    fit diagnostics.
-7. **Robustness checks**: illiquid-quartile exclusion
+8. **Robustness checks**: illiquid-quartile exclusion
    (`results/tables/robustness_illiquid_quartile_exclusion.csv`),
    multi-seed Monte Carlo variance (`tests/test_monte_carlo.py`,
    notebook 02), and parameter stability across both strike subsets and
    maturities (`results/tables/h4_parameter_stability_same_maturity.csv`,
    `robustness_cross_maturity_stability.csv`).
-8. **`report/report.md`**: final write-up. Per-hypothesis verdicts,
+9. **`report/report.md`**: final write-up. Per-hypothesis verdicts,
    limitations, defense-prep Q&A, a self-audit, and a changelog of what a
    self-review pass found and fixed after the first draft.
 

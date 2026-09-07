@@ -4,7 +4,7 @@ sigma that reproduces it. Primary method is Brent's method (bracketed,
 guaranteed to converge if a root exists in the bracket); falls back to
 Newton-Raphson (using the analytical BS vega) only if Brent's bracket is
 invalid, and reports failures explicitly rather than silently returning a
-placeholder value (unlike yfinance's own IV field -- see notebook 01 EDA).
+placeholder value (unlike a raw vendor IV field -- see notebook 01 EDA).
 """
 from __future__ import annotations
 

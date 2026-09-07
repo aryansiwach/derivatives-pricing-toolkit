@@ -1,5 +1,0 @@
-ticker,model,n_expiries,expiries,params_by_expiry,v0_all_pinned_at_lower_bound
-SPY,Merton,3,2026-09-04 | 2026-09-30 | 2026-12-18,"sigma=0.102, lam=0.132, mu_j=-0.242, sigma_j=0.200 || sigma=0.103, lam=0.319, mu_j=-0.121, sigma_j=0.121 || sigma=0.113, lam=0.169, mu_j=-0.351, sigma_j=0.249",
-SPY,Heston,3,2026-09-04 | 2026-09-30 | 2026-12-18,"kappa=7.805, theta=0.093, xi=1.201, rho=-0.781, v0=0.001 || kappa=2.997, theta=0.120, xi=0.850, rho=-0.764, v0=0.001 || kappa=0.124, theta=2.000, xi=0.706, rho=-0.854, v0=0.001",True
-AAPL,Merton,3,2026-09-04 | 2026-09-25 | 2026-12-18,"sigma=0.188, lam=0.847, mu_j=-0.079, sigma_j=0.153 || sigma=0.206, lam=0.546, mu_j=-0.086, sigma_j=0.184 || sigma=0.222, lam=0.323, mu_j=-0.202, sigma_j=0.273",
-AAPL,Heston,3,2026-09-04 | 2026-09-25 | 2026-12-18,"kappa=1.337, theta=2.000, xi=2.313, rho=-0.432, v0=0.001 || kappa=2.979, theta=0.397, xi=1.537, rho=-0.239, v0=0.001 || kappa=0.238, theta=2.000, xi=0.976, rho=-0.404, v0=0.001",True
