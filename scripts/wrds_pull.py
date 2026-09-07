@@ -44,18 +44,31 @@ def connect():
     return wrds.Connection()
 
 
-def candidate_secids(db, ticker: str) -> list[int]:
-    """All secids OptionMetrics has ever mapped to this ticker. A ticker can
-    be reused over time (and an ETF like SPY can appear more than once), so the
-    caller tries each until one yields an option chain on the as-of date."""
-    df = db.raw_sql(
-        "SELECT DISTINCT secid FROM optionm.securd WHERE ticker = %(t)s "
-        "UNION SELECT DISTINCT secid FROM optionm.secnmd WHERE ticker = %(t)s",
+def candidate_secids(db, ticker: str, asof: dt.date) -> list[int]:
+    """secids OptionMetrics maps to this ticker, ordered by how many option
+    quotes each one has on the as-of date (most first). A ticker can be reused
+    over time and an ETF can appear more than once."""
+    sec = db.raw_sql(
+        "SELECT secid, index_flag, issue_type FROM optionm.securd "
+        "WHERE ticker = %(t)s "
+        "UNION SELECT secid, NULL, NULL FROM optionm.secnmd WHERE ticker = %(t)s",
         params={"t": ticker},
     )
-    if df.empty:
+    if sec.empty:
         raise RuntimeError(f"no OptionMetrics secid for ticker {ticker!r}")
-    return [int(s) for s in df["secid"]]
+
+    year = asof.year
+    counts = []
+    for sid in sorted({int(s) for s in sec["secid"]}):
+        n = db.raw_sql(
+            f"SELECT count(*) AS n FROM optionm.opprcd{year} "
+            f"WHERE secid = %(s)s AND date = %(d)s",
+            params={"s": sid, "d": asof},
+        )
+        counts.append((sid, int(n.iloc[0]["n"])))
+    counts.sort(key=lambda x: -x[1])
+    print(f"  {ticker} candidate secids (secid, #quotes on {asof}): {counts}")
+    return [sid for sid, _ in counts]
 
 
 def pull_chain(db, secid: int, asof: dt.date) -> pd.DataFrame:
@@ -73,9 +86,10 @@ def pull_chain(db, secid: int, asof: dt.date) -> pd.DataFrame:
     )
     if df.empty:
         return df
-    df["strike"] = df["strike_price"].astype(float) / 1000.0
-    df["option_type"] = df["cp_flag"].map({"C": "call", "P": "put"})
-    return df.drop(columns=["strike_price", "cp_flag"])
+    return df.assign(
+        strike=df["strike_price"].astype(float) / 1000.0,
+        option_type=df["cp_flag"].map({"C": "call", "P": "put"}),
+    ).drop(columns=["strike_price", "cp_flag"])
 
 
 def pull_spot(db, secid: int, asof: dt.date) -> pd.DataFrame:
@@ -126,7 +140,7 @@ def main():
     try:
         pull_zero_curve(db, asof).to_csv(RAW_DIR / "zero_curve.csv", index=False)
         for tkr in TICKERS:
-            secids = candidate_secids(db, tkr)
+            secids = candidate_secids(db, tkr, asof)
             chain, secid = None, None
             for sid in secids:
                 c = pull_chain(db, sid, asof)
