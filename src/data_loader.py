@@ -107,9 +107,9 @@ def load_zero_curve() -> pd.DataFrame:
     PERCENT, divided by 100 here; no ln(1 + r_simple) conversion, unlike the
     old FRED simple-rate path)."""
     d = pd.read_csv(_raw_dir() / "zero_curve.csv")
-    d = d.sort_values("days").reset_index(drop=True)
-    d["rate_cc"] = d["rate"].astype(float) / 100.0
-    return d
+    return (d.sort_values("days")
+            .assign(rate_cc=lambda x: x["rate"].astype(float) / 100.0)
+            .reset_index(drop=True))
 
 
 def interpolate_zero_rate(curve: pd.DataFrame, days: float) -> float:
@@ -350,5 +350,8 @@ def latest_pull(ticker: str) -> tuple[dict, pd.DataFrame]:
 
 if __name__ == "__main__":
     for tkr in ["SPY", "AAPL"]:
+        if not (WRDS_RAW_DIR / f"{tkr}_chain.csv").exists():
+            print(f"{tkr}: no pull in {WRDS_RAW_DIR} -- skipping")
+            continue
         result = pull_and_process(tkr)
         print(json.dumps(result, indent=2, default=str))

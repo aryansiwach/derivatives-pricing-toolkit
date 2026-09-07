@@ -44,12 +44,18 @@ def connect():
     return wrds.Connection()
 
 
-def resolve_secid(db, ticker: str) -> int:
-    df = db.raw_sql("SELECT secid FROM optionm.securd WHERE ticker = %(t)s",
-                    params={"t": ticker})
+def candidate_secids(db, ticker: str) -> list[int]:
+    """All secids OptionMetrics has ever mapped to this ticker. A ticker can
+    be reused over time (and an ETF like SPY can appear more than once), so the
+    caller tries each until one yields an option chain on the as-of date."""
+    df = db.raw_sql(
+        "SELECT DISTINCT secid FROM optionm.securd WHERE ticker = %(t)s "
+        "UNION SELECT DISTINCT secid FROM optionm.secnmd WHERE ticker = %(t)s",
+        params={"t": ticker},
+    )
     if df.empty:
         raise RuntimeError(f"no OptionMetrics secid for ticker {ticker!r}")
-    return int(df.iloc[0]["secid"])
+    return [int(s) for s in df["secid"]]
 
 
 def pull_chain(db, secid: int, asof: dt.date) -> pd.DataFrame:
@@ -74,14 +80,15 @@ def pull_chain(db, secid: int, asof: dt.date) -> pd.DataFrame:
 
 def pull_spot(db, secid: int, asof: dt.date) -> pd.DataFrame:
     year = asof.year
+    lo = (asof - dt.timedelta(days=5)).isoformat()
     df = db.raw_sql(
         f"SELECT date, close FROM optionm.secprd{year} "
-        f"WHERE secid = %(s)s AND date = %(d)s",
-        params={"s": secid, "d": asof},
+        f"WHERE secid = %(s)s AND date BETWEEN %(lo)s AND %(d)s ORDER BY date DESC",
+        params={"s": secid, "lo": lo, "d": asof},
     )
     if df.empty:
-        raise RuntimeError(f"no underlying close for secid {secid} on {asof}")
-    return df
+        raise RuntimeError(f"no underlying close for secid {secid} near {asof}")
+    return df.head(1)      # the as-of date, or the last close before it
 
 
 def pull_dividends(db, secid: int, asof: dt.date) -> pd.DataFrame:
@@ -119,10 +126,16 @@ def main():
     try:
         pull_zero_curve(db, asof).to_csv(RAW_DIR / "zero_curve.csv", index=False)
         for tkr in TICKERS:
-            secid = resolve_secid(db, tkr)
-            chain = pull_chain(db, secid, asof)
-            if chain.empty:
-                print(f"{tkr}: no option rows for {asof} -- pick another date")
+            secids = candidate_secids(db, tkr)
+            chain, secid = None, None
+            for sid in secids:
+                c = pull_chain(db, sid, asof)
+                if not c.empty:
+                    chain, secid = c, sid
+                    break
+            if chain is None:
+                print(f"{tkr}: no option rows for {asof} on any of secids "
+                      f"{secids} -- try another --asof date")
                 continue
             chain.to_csv(RAW_DIR / f"{tkr}_chain.csv", index=False)
             pull_spot(db, secid, asof).to_csv(RAW_DIR / f"{tkr}_spot.csv", index=False)
@@ -130,7 +143,7 @@ def main():
                 RAW_DIR / f"{tkr}_dividends.csv", index=False)
             meta["tickers"][tkr] = {"secid": secid, "n_quotes": len(chain),
                                     "n_expiries": int(chain["exdate"].nunique())}
-            print(f"{tkr}: secid {secid}, {len(chain)} quotes, "
+            print(f"{tkr}: secid {secid} (of {secids}), {len(chain)} quotes, "
                   f"{chain['exdate'].nunique()} expiries")
     finally:
         db.close()
