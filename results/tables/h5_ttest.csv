@@ -1,0 +1,2 @@
+t_stat,p_value,itm_put_mean_premium,itm_put_n,other_mean_premium,other_n,t_stat_group_level,p_value_group_level,itm_put_group_mean,itm_put_group_n,other_group_mean,other_group_n
+8.670576521699095,1.965125548423979e-09,1.1493632187212623,29,0.052735310531880485,722,3.465412232472301,0.01741546122401564,0.9137493948284444,6,0.05038571764560107,30
