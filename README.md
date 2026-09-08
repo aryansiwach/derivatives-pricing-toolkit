@@ -4,43 +4,42 @@ Closed-form (Black-Scholes-Merton), lattice (CRR binomial), and simulation
 (Monte Carlo) option pricing compared on accuracy, convergence, and cost,
 extended with Merton jump-diffusion and Heston stochastic-volatility
 calibration to real SPY/AAPL implied-vol surfaces, plus an American
-early-exercise premium analysis. See `report/report.md` for the full
+early-exercise premium analysis. Data is WRDS OptionMetrics IvyDB US
+(SPY and AAPL, as-of 2024-03-15). See `report/report.md` for the full
 write-up and findings.
 
 ## Summary of findings
 
 Full detail, numbers, and defense-prep Q&A live in `report/report.md`. Headline:
 
-- **H1 (convergence): supported.** Binomial error scales as N^-1.08, Monte
+- **H1 (convergence): supported.** Binomial error scales as N^-1.20, Monte
   Carlo standard error as N^-0.53, both close to theory (-1, -0.5) and
   highly significant.
 - **H2 (smile): supported**, including under a Newey-West HAC-robust test
   that accounts for correlated strikes (not just plain OLS). Every
-  SPY/AAPL expiry shows significant skew and curvature; survives excluding
-  the bottom volume quartile.
+  SPY/AAPL expiry shows significant skew and curvature (worst HAC p-value
+  1.6e-3); survives excluding the bottom volume quartile.
 - **H3 (variance reduction): supported.** Antithetic variates cut Monte
-  Carlo standard error 29%, control variates cut it 62%, and neither
+  Carlo standard error 37%, control variates cut it 69%, and neither
   estimator is distinguishable from unbiased at the 1% level.
 - **H4 (Merton/Heston vs. flat BS): Merton robustly supported; Heston
   supported but weakly identified.** Both beat flat Black-Scholes
-  out-of-sample in every ticker/expiry combination. Both calibrators run
-  from three starting points and keep the best fit, specifically so
-  parameter instability can't be blamed on an unlucky initial guess.
-  Merton finds the same optimum from every start (spread in RMSE near
-  zero everywhere). Heston is more interesting: one fit improved with a
-  better starting point, but five of six landed on identical parameters
-  regardless of where the search began, and the instantaneous variance
-  pinned at its lower calibration bound across all eighteen individual
-  optimization attempts. That's reported as what it is: real evidence the
-  data doesn't identify Heston's five parameters well at this calibration
-  size, not an optimizer problem.
+  out-of-sample in every ticker/expiry combination (Merton 57-95%, Heston
+  42-84% lower IV RMSE). Both calibrators run from three starting points
+  and keep the best fit, so parameter instability can't be blamed on an
+  unlucky initial guess. Merton finds the same optimum from every start on
+  the five larger calibration sets. Heston has exactly one clean fit (SPY
+  near-dated: stable across starts, Feller satisfied, `v0` not pinned);
+  the other five either fail to converge or land on identical parameters
+  from every start with `v0` pinned at its lower bound. Reported as what it
+  is: real evidence the data doesn't identify Heston's five parameters
+  well at this calibration size, not an optimizer problem.
 - **H5 (early-exercise premium): supported.** ITM puts carry a materially
-  larger premium than the rest of the surface, concentrated more in SPY
-  (higher dividend yield) than AAPL (lower yield), matching theory. Tested
-  two ways: a contract-level test (p=1.9e-7) and a more conservative
-  group-level test that treats each ticker/expiry/bucket as one
-  observation instead of pooling correlated contracts (p=0.030). Both
-  reject the null; the group-level number is the one worth trusting.
+  larger premium than the rest of the surface (SPY 4.9% of price, AAPL
+  4.6%), while calls carry none. Tested two ways: a contract-level test
+  (p=2e-9) and a more conservative group-level test that treats each
+  ticker/expiry/bucket as one observation (p=0.017). Both reject the null;
+  the group-level number is the one worth trusting.
 
 ## Setup
 
@@ -121,16 +120,18 @@ figures and tables, and `report/` holds the write-up.
 
 ## Known limitations (see report for full discussion)
 
-- Single point-in-time snapshot: one day, one vol regime, not a
-  historical panel.
-- Continuous dividend yield and continuous-compounding rate conversion
-  both approximate discrete real-world quantities.
+- Single point-in-time snapshot: one day, one vol regime. A historical
+  panel is feasible with IvyDB and is the obvious next extension.
+- Continuous dividend yield approximates the discrete `optionm.distrd`
+  cash payments.
 - Implied vol and calibration use the Black-Scholes (European) formula as
   the inversion model even though SPY/AAPL options are American. Standard
   market-convention simplification, addressed directly by the
   binomial-based early-exercise analysis in notebook 04.
 - Monte Carlo in this toolkit prices European payoffs only; American MC
   (Longstaff-Schwartz) is out of scope.
-- Heston's five parameters are weakly identified by a 10-12-point
+- Heston's five parameters are weakly identified by a 6-12-point
   per-expiry calibration on this data, confirmed rather than assumed by
   running each fit from three starting points (see report section 4/7).
+- The raw OptionMetrics chains are licensed and not committed; `data/` is
+  git-ignored. `results/` (the aggregate tables and figures) is committed.
